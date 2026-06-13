@@ -47,8 +47,13 @@ export class MarketService {
     const ticks = getTicksForOffline(market.lastTickAt, now);
     let ticksApplied = 0;
     if (ticks > 0) {
-      market = tickMarketState(market, ticks, now);
+      const { state: nextState, seasonChanged } = tickMarketState(market, ticks, now);
+      market = nextState;
       ticksApplied = ticks;
+      const prices = seasonChanged
+        ? regeneratePlanetPricesFromMarket(market)
+        : regeneratePlanetPricesFromMarket(market);
+      return { market, prices, ticksApplied };
     } else {
       market = { ...market, lastTickAt: now };
     }
@@ -65,9 +70,14 @@ export class MarketService {
     now: number = Date.now()
   ): TravelTickResult {
     const ticks = Math.max(2, Math.round(distanceFactor * 15));
-    const nextMarket = tickMarketState(market, ticks, now);
-    const prices = regeneratePartialPrices(existingPrices, [toPlanetId], nextMarket);
-    return { market: nextMarket, planetPrices: prices };
+    const { state: nextState, seasonChanged } = tickMarketState(market, ticks, now);
+    let prices: Record<string, Record<string, number>>;
+    if (seasonChanged) {
+      prices = regeneratePlanetPricesFromMarket(nextState);
+    } else {
+      prices = regeneratePartialPrices(existingPrices, [toPlanetId], nextState);
+    }
+    return { market: nextState, planetPrices: prices };
   }
 
   static applyTradeImpact(
@@ -115,9 +125,14 @@ export class MarketService {
     existingPrices: Record<string, Record<string, number>>,
     now: number = Date.now()
   ): TravelTickResult {
-    const nextMarket = tickMarketState(market, 1, now);
-    const prices = regeneratePlanetPricesFromMarket(nextMarket);
-    return { market: nextMarket, planetPrices: prices };
+    const { state: nextState, seasonChanged } = tickMarketState(market, 1, now);
+    let prices: Record<string, Record<string, number>>;
+    if (seasonChanged) {
+      prices = regeneratePlanetPricesFromMarket(nextState);
+    } else {
+      prices = regeneratePlanetPricesFromMarket(nextState);
+    }
+    return { market: nextState, planetPrices: prices };
   }
 
   static getGoodTrendInfo(goodId: string, market: PriceMarketState): {

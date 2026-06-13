@@ -1,3 +1,8 @@
+import { GOODS } from './goods';
+import { PLANETS } from './planets';
+import type { Good } from '../types/game';
+import type { PlanetSD } from '../utils/priceEngine';
+
 export type SeasonId = 'spring' | 'summer' | 'autumn' | 'winter';
 
 export interface SeasonDef {
@@ -8,6 +13,7 @@ export interface SeasonDef {
   glowClass: string;
   sdBias: Record<string, number>;
   priceMult: Record<string, number>;
+  shockStrength: Record<string, number>;
 }
 
 export const SEASON_DURATION = 50;
@@ -19,8 +25,9 @@ export const SEASONS: SeasonDef[] = [
     icon: '🌸',
     color: 'text-emerald-400',
     glowClass: 'text-glow-green',
-    sdBias: { food: 0.2, medicine: -0.1 },
-    priceMult: { food: 1.2, medicine: 0.95 },
+    sdBias: { food: 0.45, medicine: -0.15 },
+    priceMult: { food: 1.35, medicine: 0.92 },
+    shockStrength: { food: 0.45, medicine: -0.2 },
   },
   {
     id: 'summer',
@@ -28,8 +35,9 @@ export const SEASONS: SeasonDef[] = [
     icon: '☀️',
     color: 'text-amber-400',
     glowClass: 'text-glow-yellow',
-    sdBias: { crystal: -0.15, luxury: 0.15 },
-    priceMult: { crystal: 0.9, luxury: 1.15 },
+    sdBias: { crystal: -0.3, luxury: 0.35 },
+    priceMult: { crystal: 0.82, luxury: 1.3 },
+    shockStrength: { crystal: -0.35, luxury: 0.35 },
   },
   {
     id: 'autumn',
@@ -37,8 +45,9 @@ export const SEASONS: SeasonDef[] = [
     icon: '🍂',
     color: 'text-orange-400',
     glowClass: 'text-glow-orange',
-    sdBias: { ore: 0.15, food: -0.2 },
-    priceMult: { ore: 1.15, food: 0.85 },
+    sdBias: { ore: 0.35, food: -0.35 },
+    priceMult: { ore: 1.28, food: 0.78 },
+    shockStrength: { ore: 0.35, food: -0.4 },
   },
   {
     id: 'winter',
@@ -46,8 +55,9 @@ export const SEASONS: SeasonDef[] = [
     icon: '❄️',
     color: 'text-cyan-300',
     glowClass: 'text-glow-cyan',
-    sdBias: { weapons: 0.3, medicine: 0.2 },
-    priceMult: { weapons: 1.3, medicine: 1.2 },
+    sdBias: { weapons: 0.55, medicine: 0.35 },
+    priceMult: { weapons: 1.5, medicine: 1.35 },
+    shockStrength: { weapons: 0.55, medicine: 0.4 },
   },
 ];
 
@@ -56,3 +66,106 @@ export const getSeasonByIndex = (index: number): SeasonDef =>
 
 export const getSeasonIndex = (id: SeasonId): number =>
   SEASONS.findIndex((s) => s.id === id);
+
+const clamp = (v: number, min: number, max: number) =>
+  Math.max(min, Math.min(max, v));
+
+export const getSeasonSDEffects = (
+  seasonIndex: number
+): Record<string, { sdBias: number; priceMult: number; shock: number }> => {
+  const season = getSeasonByIndex(seasonIndex);
+  const result: Record<string, { sdBias: number; priceMult: number; shock: number }> = {};
+  for (const g of GOODS) {
+    result[g.id] = {
+      sdBias: season.sdBias[g.id] ?? 0,
+      priceMult: season.priceMult[g.id] ?? 1,
+      shock: season.shockStrength[g.id] ?? 0,
+    };
+  }
+  return result;
+};
+
+export const applySeasonShock = (
+  planetSupplyDemand: Record<string, PlanetSD>,
+  seasonIndex: number
+): Record<string, PlanetSD> => {
+  const season = getSeasonByIndex(seasonIndex);
+  const shocks = season.shockStrength;
+  const result: Record<string, PlanetSD> = {};
+
+  for (const planet of PLANETS) {
+    const sd: PlanetSD = { ...(planetSupplyDemand[planet.id] ?? {}) };
+    for (const g of GOODS) {
+      const shock = shocks[g.id] ?? 0;
+      if (shock !== 0) {
+        const cur = sd[g.id] ?? 0;
+        sd[g.id] = clamp(cur + shock * (0.75 + Math.random() * 0.5), -1, 1);
+      }
+    }
+    result[planet.id] = sd;
+  }
+  return result;
+};
+
+export const getSeasonPullStrength = (
+  seasonIndex: number,
+  goodId: string
+): number => {
+  const season = getSeasonByIndex(seasonIndex);
+  const hasImpact =
+    Math.abs(season.sdBias[goodId] ?? 0) > 0.01 ||
+    Math.abs(season.priceMult[goodId] ?? 1 - 1) > 0.01;
+  return hasImpact ? 0.12 : 0.05;
+};
+
+export interface GoodSeasonEffect {
+  goodId: string;
+  good: Good | undefined;
+  priceMult: number;
+  sdBias: number;
+  priceDeltaPct: number;
+  label: string;
+  tone: 'up' | 'down' | 'flat';
+}
+
+export const getGoodSeasonEffects = (seasonIndex: number): GoodSeasonEffect[] => {
+  const season = getSeasonByIndex(seasonIndex);
+  return GOODS.map((g) => {
+    const priceMult = season.priceMult[g.id] ?? 1;
+    const sdBias = season.sdBias[g.id] ?? 0;
+    const priceDeltaPct = Math.round((priceMult - 1) * 100);
+
+    let tone: 'up' | 'down' | 'flat' = 'flat';
+    let label = '无季节影响';
+
+    if (priceDeltaPct > 5 || sdBias > 0.1) {
+      tone = 'up';
+      const parts: string[] = [];
+      if (priceDeltaPct > 0) parts.push(`价格+${priceDeltaPct}%`);
+      if (sdBias > 0.1) parts.push(`需求↑`);
+      label = parts.join(' · ') || '旺季';
+    } else if (priceDeltaPct < -5 || sdBias < -0.1) {
+      tone = 'down';
+      const parts: string[] = [];
+      if (priceDeltaPct < 0) parts.push(`价格${priceDeltaPct}%`);
+      if (sdBias < -0.1) parts.push(`供应↑`);
+      label = parts.join(' · ') || '淡季';
+    }
+
+    return {
+      goodId: g.id,
+      good: g,
+      priceMult,
+      sdBias,
+      priceDeltaPct,
+      label,
+      tone,
+    };
+  });
+};
+
+export const getCyclesLeft = (seasonTick: number): number =>
+  SEASON_DURATION - seasonTick;
+
+export const getSeasonProgressPct = (seasonTick: number): number =>
+  (seasonTick / SEASON_DURATION) * 100;

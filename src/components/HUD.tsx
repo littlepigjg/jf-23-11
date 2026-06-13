@@ -1,6 +1,6 @@
 import { useGameStore } from '../store/useGameStore';
 import { getPlanet } from '../data/planets';
-import { getSeasonByIndex, SEASON_DURATION } from '../data/seasons';
+import { getSeasonByIndex, getCyclesLeft, getSeasonProgressPct } from '../data/seasons';
 
 export default function HUD() {
   const credits = useGameStore((s) => s.credits);
@@ -11,7 +11,8 @@ export default function HUD() {
   const marketState = useGameStore((s) => s.marketState);
 
   const season = getSeasonByIndex(marketState.seasonIndex);
-  const cyclesLeft = SEASON_DURATION - marketState.seasonTick;
+  const cyclesLeft = getCyclesLeft(marketState.seasonTick);
+  const seasonProgress = getSeasonProgressPct(marketState.seasonTick);
 
   const planet = getPlanet(currentPlanetId);
   const cargoUsed = cargo.reduce((sum, c) => sum + c.quantity, 0);
@@ -79,14 +80,33 @@ export default function HUD() {
       </div>
 
       <div className="flex items-center justify-center gap-6 px-4">
-        <div className="flex items-center gap-2 px-3 py-1 rounded-lg bg-white/5 border border-white/10">
-          <span className="text-lg">{season.icon}</span>
-          <span className={`font-orbitron font-semibold text-sm tracking-wide ${season.color} ${season.glowClass}`}>
-            {season.name}季
-          </span>
-          <span className="text-xs text-slate-500 font-mono ml-1">
-            {cyclesLeft}周期
-          </span>
+        <div className="flex items-center gap-2.5 px-3.5 py-1.5 rounded-lg bg-white/5 border border-white/10 min-w-[180px]">
+          <span className="text-xl">{season.icon}</span>
+          <div className="flex flex-col gap-0.5 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className={`font-orbitron font-semibold text-sm tracking-wide ${season.color} ${season.glowClass}`}>
+                {season.name}季
+              </span>
+              <span className="text-[10px] text-slate-500 font-mono">
+                剩 {cyclesLeft}
+              </span>
+            </div>
+            <div className="w-full h-1 rounded-full bg-space-800 overflow-hidden">
+              <div
+                className="h-full transition-all duration-500"
+                style={{
+                  width: `${seasonProgress}%`,
+                  background: season.id === 'spring'
+                    ? 'linear-gradient(90deg,#22c55e,#10b981)'
+                    : season.id === 'summer'
+                    ? 'linear-gradient(90deg,#f59e0b,#fbbf24)'
+                    : season.id === 'autumn'
+                    ? 'linear-gradient(90deg,#f97316,#fb923c)'
+                    : 'linear-gradient(90deg,#06b6d4,#22d3ee)',
+                }}
+              />
+            </div>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">

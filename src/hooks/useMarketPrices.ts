@@ -32,14 +32,17 @@ export function useMarketPrices(): UseMarketPricesResult {
     (market: PriceMarketState, now: number = Date.now()): PriceMarketState => {
       const ticks = getTicksForOffline(market.lastTickAt, now);
       if (ticks <= 0) return { ...market, lastTickAt: now };
-      return tickMarketState(market, ticks, now);
+      const { state } = tickMarketState(market, ticks, now);
+      return state;
     },
     []
   );
 
   const tick = useCallback(
-    (market: PriceMarketState, ticks: number, now: number = Date.now()) =>
-      tickMarketState(market, ticks, now),
+    (market: PriceMarketState, ticks: number, now: number = Date.now()) => {
+      const { state } = tickMarketState(market, ticks, now);
+      return state;
+    },
     []
   );
 
@@ -70,7 +73,10 @@ export function useMarketPrices(): UseMarketPricesResult {
 
       if (market.lastTickAt > 0) {
         const ticks = getTicksForOffline(market.lastTickAt, now);
-        if (ticks > 0) market = tickMarketState(market, ticks, now);
+        if (ticks > 0) {
+          const { state: nextState } = tickMarketState(market, ticks, now);
+          market = nextState;
+        }
       } else {
         market = createInitialMarketState(now);
       }

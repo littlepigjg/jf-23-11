@@ -4,6 +4,7 @@ import { GOODS } from '../data/goods';
 import { getPlanet } from '../data/planets';
 import { describeTrend, describeSD } from '../utils/priceEngine';
 import { cn } from '../lib/utils';
+import { getGoodSeasonEffects, getSeasonByIndex } from '../data/seasons';
 
 export default function TradePanel() {
   const {
@@ -17,6 +18,12 @@ export default function TradePanel() {
     sellGood,
     getCargoUsed,
   } = useGameStore();
+
+  const season = getSeasonByIndex(marketState.seasonIndex);
+  const seasonEffects = React.useMemo(
+    () => Object.fromEntries(getGoodSeasonEffects(marketState.seasonIndex).map((e) => [e.goodId, e])),
+    [marketState.seasonIndex]
+  );
 
   const [quantities, setQuantities] = React.useState<Record<string, number>>(
     () => Object.fromEntries(GOODS.map((g) => [g.id, 1]))
@@ -133,13 +140,25 @@ export default function TradePanel() {
                   </div>
                 </div>
 
-                <div className="mb-3 flex items-center gap-2 text-xs">
+                <div className="mb-3 flex items-center gap-2 text-xs flex-wrap">
                   <span className={cn('rounded px-1.5 py-0.5', trendInfo.color, 'bg-white/5')}>
                     {trendInfo.label}
                   </span>
                   <span className={cn('rounded px-1.5 py-0.5', sdInfo.color, 'bg-white/5')}>
                     {sdInfo.label}
                   </span>
+                  {seasonEffects[good.id]?.tone !== 'flat' && (
+                    <span
+                      className={cn(
+                        'rounded px-1.5 py-0.5 font-semibold border',
+                        seasonEffects[good.id].tone === 'up'
+                          ? 'text-rose-400 border-rose-500/40 bg-rose-500/10'
+                          : 'text-emerald-400 border-emerald-500/40 bg-emerald-500/10'
+                      )}
+                    >
+                      {season.icon} {seasonEffects[good.id].label}
+                    </span>
+                  )}
                 </div>
 
                 <div className="mb-3 flex items-center gap-2">
