@@ -1,7 +1,5 @@
 import { GOODS } from './goods';
-import { PLANETS } from './planets';
 import type { Good } from '../types/game';
-import type { PlanetSD } from '../utils/priceEngine';
 
 export type SeasonId = 'spring' | 'summer' | 'autumn' | 'winter';
 
@@ -13,10 +11,13 @@ export interface SeasonDef {
   glowClass: string;
   sdBias: Record<string, number>;
   priceMult: Record<string, number>;
-  shockStrength: Record<string, number>;
 }
 
 export const SEASON_DURATION = 50;
+
+export const SEASON_TYPE_COMPRESS = 2.5;
+
+export const SEASON_SD_DIRECT = 1.0;
 
 export const SEASONS: SeasonDef[] = [
   {
@@ -27,7 +28,6 @@ export const SEASONS: SeasonDef[] = [
     glowClass: 'text-glow-green',
     sdBias: { food: 0.45, medicine: -0.15 },
     priceMult: { food: 1.35, medicine: 0.92 },
-    shockStrength: { food: 0.45, medicine: -0.2 },
   },
   {
     id: 'summer',
@@ -37,7 +37,6 @@ export const SEASONS: SeasonDef[] = [
     glowClass: 'text-glow-yellow',
     sdBias: { crystal: -0.3, luxury: 0.35 },
     priceMult: { crystal: 0.82, luxury: 1.3 },
-    shockStrength: { crystal: -0.35, luxury: 0.35 },
   },
   {
     id: 'autumn',
@@ -47,7 +46,6 @@ export const SEASONS: SeasonDef[] = [
     glowClass: 'text-glow-orange',
     sdBias: { ore: 0.35, food: -0.35 },
     priceMult: { ore: 1.28, food: 0.78 },
-    shockStrength: { ore: 0.35, food: -0.4 },
   },
   {
     id: 'winter',
@@ -57,7 +55,6 @@ export const SEASONS: SeasonDef[] = [
     glowClass: 'text-glow-cyan',
     sdBias: { weapons: 0.55, medicine: 0.35 },
     priceMult: { weapons: 1.5, medicine: 1.35 },
-    shockStrength: { weapons: 0.55, medicine: 0.4 },
   },
 ];
 
@@ -67,42 +64,34 @@ export const getSeasonByIndex = (index: number): SeasonDef =>
 export const getSeasonIndex = (id: SeasonId): number =>
   SEASONS.findIndex((s) => s.id === id);
 
-const clamp = (v: number, min: number, max: number) =>
-  Math.max(min, Math.min(max, v));
+export const getCompressedTypeMult = (
+  typeMult: number,
+  seasonMult: number
+): number => {
+  const seasonStrength = Math.abs(seasonMult - 1);
+  if (seasonStrength < 0.01) return typeMult;
+  const compressFactor = 1 / (1 + seasonStrength * SEASON_TYPE_COMPRESS);
+  return 1 + (typeMult - 1) * compressFactor;
+};
+
+export const getSeasonDirectSD = (
+  seasonIndex: number,
+  goodId: string
+): number => {
+  const season = getSeasonByIndex(seasonIndex);
+  return (season.sdBias[goodId] ?? 0) * SEASON_SD_DIRECT;
+};
 
 export const getSeasonSDEffects = (
   seasonIndex: number
-): Record<string, { sdBias: number; priceMult: number; shock: number }> => {
+): Record<string, { sdBias: number; priceMult: number }> => {
   const season = getSeasonByIndex(seasonIndex);
-  const result: Record<string, { sdBias: number; priceMult: number; shock: number }> = {};
+  const result: Record<string, { sdBias: number; priceMult: number }> = {};
   for (const g of GOODS) {
     result[g.id] = {
       sdBias: season.sdBias[g.id] ?? 0,
       priceMult: season.priceMult[g.id] ?? 1,
-      shock: season.shockStrength[g.id] ?? 0,
     };
-  }
-  return result;
-};
-
-export const applySeasonShock = (
-  planetSupplyDemand: Record<string, PlanetSD>,
-  seasonIndex: number
-): Record<string, PlanetSD> => {
-  const season = getSeasonByIndex(seasonIndex);
-  const shocks = season.shockStrength;
-  const result: Record<string, PlanetSD> = {};
-
-  for (const planet of PLANETS) {
-    const sd: PlanetSD = { ...(planetSupplyDemand[planet.id] ?? {}) };
-    for (const g of GOODS) {
-      const shock = shocks[g.id] ?? 0;
-      if (shock !== 0) {
-        const cur = sd[g.id] ?? 0;
-        sd[g.id] = clamp(cur + shock * (0.75 + Math.random() * 0.5), -1, 1);
-      }
-    }
-    result[planet.id] = sd;
   }
   return result;
 };
@@ -111,11 +100,7 @@ export const getSeasonPullStrength = (
   seasonIndex: number,
   goodId: string
 ): number => {
-  const season = getSeasonByIndex(seasonIndex);
-  const hasImpact =
-    Math.abs(season.sdBias[goodId] ?? 0) > 0.01 ||
-    Math.abs(season.priceMult[goodId] ?? 1 - 1) > 0.01;
-  return hasImpact ? 0.12 : 0.05;
+  return 0.08;
 };
 
 export interface GoodSeasonEffect {

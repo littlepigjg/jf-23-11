@@ -3,9 +3,9 @@ import { PLANETS } from '../data/planets';
 import {
   SEASON_DURATION,
   getSeasonByIndex,
-  applySeasonShock,
+  getCompressedTypeMult,
+  getSeasonDirectSD,
   getSeasonPullStrength,
-  getSeasonSDEffects,
 } from '../data/seasons';
 import type { Planet, PlanetType } from '../types/game';
 
@@ -25,7 +25,7 @@ export interface PriceMarketState {
   seasonTick: number;
 }
 
-export const MARKET_STATE_VERSION = 3;
+export const MARKET_STATE_VERSION = 4;
 export const TICK_MINUTES = 1;
 export const MAX_OFFLINE_TICKS = 60 * 24 * 3;
 
@@ -71,7 +71,7 @@ export const createInitialMarketState = (
     planetSupplyDemand[p.id] = sd;
   }
 
-  const initialState: PriceMarketState = {
+  return {
     version: MARKET_STATE_VERSION,
     lastTickAt: now,
     globalTrends,
@@ -79,9 +79,6 @@ export const createInitialMarketState = (
     seasonIndex: 0,
     seasonTick: 0,
   };
-
-  initialState.planetSupplyDemand = applySeasonShock(planetSupplyDemand, 0);
-  return initialState;
 };
 
 const tickTrend = (trend: GoodTrend): GoodTrend => {
@@ -94,15 +91,12 @@ const tickTrend = (trend: GoodTrend): GoodTrend => {
 
 const tickPlanetSD = (planet: Planet, sd: PlanetSD, seasonIndex: number): PlanetSD => {
   const natural = planetTypeNaturalSD[planet.type] ?? {};
-  const seasonEffects = getSeasonSDEffects(seasonIndex);
   const next: PlanetSD = {};
   for (const g of GOODS) {
     const cur = sd[g.id] ?? 0;
     const nat = natural[g.id] ?? 0;
-    const effect = seasonEffects[g.id];
-    const seasonBias = effect?.sdBias ?? 0;
     const pullStrength = getSeasonPullStrength(seasonIndex, g.id);
-    const pull = (nat + seasonBias - cur) * pullStrength;
+    const pull = (nat - cur) * pullStrength;
     const noise = (Math.random() - 0.5) * 0.045;
     next[g.id] = clamp(cur + pull + noise, -1, 1);
   }
@@ -140,7 +134,6 @@ export const tickMarketState = (
       seasonTick = 0;
       seasonIndex = (seasonIndex + 1) % 4;
       seasonChanged = true;
-      sdMap = applySeasonShock(sdMap, seasonIndex);
     }
   }
 
@@ -170,15 +163,18 @@ export const computePrice = (
   const season = getSeasonByIndex(market.seasonIndex);
   const typeMult = planetTypeMultiplier[planet.type]?.[goodId] ?? 1;
   const seasonMult = season.priceMult[goodId] ?? 1;
+  const effectiveTypeMult = getCompressedTypeMult(typeMult, seasonMult);
+
   const sd = market.planetSupplyDemand[planetId]?.[goodId] ?? 0;
+  const seasonSD = getSeasonDirectSD(market.seasonIndex, goodId);
   const trend = market.globalTrends[goodId]?.value ?? 0;
   const jitter = 1 + (Math.random() - 0.5) * 2 * randomness;
 
-  const sdFactor = 1 + sd * SD_IMPACT_STRENGTH;
+  const sdFactor = 1 + sd * SD_IMPACT_STRENGTH + seasonSD * SD_IMPACT_STRENGTH;
   const trendFactor = 1 + trend * TREND_IMPACT_STRENGTH;
 
   const raw =
-    good.basePrice * typeMult * seasonMult * sdFactor * trendFactor * jitter;
+    good.basePrice * effectiveTypeMult * seasonMult * sdFactor * trendFactor * jitter;
 
   return Math.max(1, Math.round(raw));
 };
