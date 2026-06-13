@@ -1,5 +1,6 @@
 import { GOODS } from '../data/goods';
 import { PLANETS } from '../data/planets';
+import { SEASON_DURATION, getSeasonByIndex } from '../data/seasons';
 import type { Planet, PlanetType } from '../types/game';
 
 export interface GoodTrend {
@@ -14,9 +15,11 @@ export interface PriceMarketState {
   lastTickAt: number;
   globalTrends: Record<string, GoodTrend>;
   planetSupplyDemand: Record<string, PlanetSD>;
+  seasonIndex: number;
+  seasonTick: number;
 }
 
-export const MARKET_STATE_VERSION = 2;
+export const MARKET_STATE_VERSION = 3;
 export const TICK_MINUTES = 1;
 export const MAX_OFFLINE_TICKS = 60 * 24 * 3;
 
@@ -64,6 +67,8 @@ export const createInitialMarketState = (
     lastTickAt: now,
     globalTrends,
     planetSupplyDemand,
+    seasonIndex: 0,
+    seasonTick: 0,
   };
 };
 
@@ -75,13 +80,15 @@ const tickTrend = (trend: GoodTrend): GoodTrend => {
   return { value, momentum };
 };
 
-const tickPlanetSD = (planet: Planet, sd: PlanetSD): PlanetSD => {
+const tickPlanetSD = (planet: Planet, sd: PlanetSD, seasonIndex: number): PlanetSD => {
   const natural = planetTypeNaturalSD[planet.type] ?? {};
+  const season = getSeasonByIndex(seasonIndex);
   const next: PlanetSD = {};
   for (const g of GOODS) {
     const cur = sd[g.id] ?? 0;
     const nat = natural[g.id] ?? 0;
-    const pull = (nat - cur) * 0.035;
+    const seasonBias = season.sdBias[g.id] ?? 0;
+    const pull = (nat + seasonBias - cur) * 0.035;
     const noise = (Math.random() - 0.5) * 0.045;
     next[g.id] = clamp(cur + pull + noise, -1, 1);
   }
@@ -97,6 +104,8 @@ export const tickMarketState = (
 
   let trends = { ...state.globalTrends };
   let sdMap = { ...state.planetSupplyDemand };
+  let seasonIndex = state.seasonIndex;
+  let seasonTick = state.seasonTick;
 
   for (let i = 0; i < ticks; i++) {
     const nextTrends: PriceMarketState['globalTrends'] = {};
@@ -107,9 +116,15 @@ export const tickMarketState = (
 
     const nextSD: PriceMarketState['planetSupplyDemand'] = {};
     for (const planet of PLANETS) {
-      nextSD[planet.id] = tickPlanetSD(planet, sdMap[planet.id] ?? {});
+      nextSD[planet.id] = tickPlanetSD(planet, sdMap[planet.id] ?? {}, seasonIndex);
     }
     sdMap = nextSD;
+
+    seasonTick += 1;
+    if (seasonTick >= SEASON_DURATION) {
+      seasonTick = 0;
+      seasonIndex = (seasonIndex + 1) % 4;
+    }
   }
 
   return {
@@ -117,6 +132,8 @@ export const tickMarketState = (
     lastTickAt: now,
     globalTrends: trends,
     planetSupplyDemand: sdMap,
+    seasonIndex,
+    seasonTick,
   };
 };
 
@@ -130,7 +147,9 @@ export const computePrice = (
   const planet = PLANETS.find((p) => p.id === planetId);
   if (!good || !planet) return 0;
 
+  const season = getSeasonByIndex(market.seasonIndex);
   const typeMult = planetTypeMultiplier[planet.type]?.[goodId] ?? 1;
+  const seasonMult = season.priceMult[goodId] ?? 1;
   const sd = market.planetSupplyDemand[planetId]?.[goodId] ?? 0;
   const trend = market.globalTrends[goodId]?.value ?? 0;
   const jitter = 1 + (Math.random() - 0.5) * 2 * randomness;
@@ -139,7 +158,7 @@ export const computePrice = (
   const trendFactor = 1 + trend * 0.3;
 
   const raw =
-    good.basePrice * typeMult * sdFactor * trendFactor * jitter;
+    good.basePrice * typeMult * seasonMult * sdFactor * trendFactor * jitter;
 
   return Math.max(1, Math.round(raw));
 };

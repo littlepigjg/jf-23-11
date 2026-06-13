@@ -1,5 +1,6 @@
 import { useGameStore } from '../store/useGameStore';
 import { getPlanet } from '../data/planets';
+import { getSeasonByIndex, SEASON_DURATION } from '../data/seasons';
 
 export default function HUD() {
   const credits = useGameStore((s) => s.credits);
@@ -7,6 +8,10 @@ export default function HUD() {
   const cargo = useGameStore((s) => s.cargo);
   const currentPlanetId = useGameStore((s) => s.currentPlanetId);
   const statistics = useGameStore((s) => s.statistics);
+  const marketState = useGameStore((s) => s.marketState);
+
+  const season = getSeasonByIndex(marketState.seasonIndex);
+  const cyclesLeft = SEASON_DURATION - marketState.seasonTick;
 
   const planet = getPlanet(currentPlanetId);
   const cargoUsed = cargo.reduce((sum, c) => sum + c.quantity, 0);
@@ -73,11 +78,23 @@ export default function HUD() {
         </div>
       </div>
 
-      <div className="flex items-center justify-center gap-2 px-4">
-        <span className="text-sm">📍</span>
-        <span className="font-orbitron font-semibold text-neon-cyan text-sm text-glow-cyan tracking-wide">
-          {planet?.name ?? '未知星域'}
-        </span>
+      <div className="flex items-center justify-center gap-6 px-4">
+        <div className="flex items-center gap-2 px-3 py-1 rounded-lg bg-white/5 border border-white/10">
+          <span className="text-lg">{season.icon}</span>
+          <span className={`font-orbitron font-semibold text-sm tracking-wide ${season.color} ${season.glowClass}`}>
+            {season.name}季
+          </span>
+          <span className="text-xs text-slate-500 font-mono ml-1">
+            {cyclesLeft}周期
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="text-sm">📍</span>
+          <span className="font-orbitron font-semibold text-neon-cyan text-sm text-glow-cyan tracking-wide">
+            {planet?.name ?? '未知星域'}
+          </span>
+        </div>
       </div>
 
       <div className="flex items-center gap-2 justify-end flex-1 min-w-0">

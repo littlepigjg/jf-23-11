@@ -145,4 +145,7 @@
   .text-glow-yellow {
     text-shadow: 0 0 6px rgba(255, 209, 102, 0.8), 0 0 16px rgba(255, 209, 102, 0.4);
   }
+  .text-glow-green {
+    text-shadow: 0 0 6px rgba(34, 197, 94, 0.8), 0 0 16px rgba(34, 197, 94, 0.4);
+  }
 }
